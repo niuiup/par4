@@ -1,9 +1,0 @@
-export default function Home() {
-  return (
-    <div style={{ padding: 20, fontSize: 18 }}>
-      <h1>Welcome to Telegram MiniApp</h1>
-      <p>Главная страница работает ✔</p>
-      <p><a href="/miniapp">Перейти в MiniApp</a></p>
-    </div>
-  );
-}
