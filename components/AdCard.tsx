@@ -1,0 +1,1 @@
+export default function AdCard({ad}){return <div>{ad?.id}</div>}
