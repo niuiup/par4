@@ -1,13 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { MapPin, Phone, Info, LayoutTemplate, Filter, X } from 'lucide-react';
-
-// Инициализация Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 // Тип данных
 type Ad = {
@@ -24,93 +17,59 @@ type Ad = {
   external_id: string;
 };
 
-// Список городов для фильтра (можешь расширить)
 const CITIES = ['Все города', 'Калининград', 'Светлогорск', 'Зеленоградск', 'Пионерский', 'Янтарный'];
 
 export default function TelegramApp() {
   const [ads, setAds] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // --- Состояние фильтров ---
-  const [showFilters, setShowFilters] = useState(false); // Открыта ли панель
+
+  // Фильтры
+  const [showFilters, setShowFilters] = useState(false);
   const [selectedCity, setSelectedCity] = useState('Все города');
-  const [selectedRoom, setSelectedRoom] = useState<string | null>(null); // null, 'studio', '1', '2', '3'
+  const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
 
   useEffect(() => {
-    // Настройка Telegram Mini App
     if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
       const tg = (window as any).Telegram.WebApp;
       tg.ready();
       tg.expand();
-      try { tg.setHeaderColor('#ffffff'); } catch (e) {}
+      try { tg.setHeaderColor('#ffffff'); } catch {}
     }
-    
-    // Первая загрузка
+
     fetchAds();
   }, []);
 
   async function fetchAds() {
     setLoading(true);
-    setShowFilters(false); // Закрываем шторку при поиске
+    setShowFilters(false);
+
+    const params = new URLSearchParams();
+
+    if (selectedCity !== 'Все города') params.set('city', selectedCity);
+    if (selectedRoom) params.set('rooms', selectedRoom);
+    if (priceMin) params.set('price_min', priceMin);
+    if (priceMax) params.set('price_max', priceMax);
+    params.set('limit', '50');
 
     try {
-      // 1. Начало запроса
-      let query = supabase
-        .from('ads')
-        .select('*')
-        .eq('is_published', true)
-        .order('created_at', { ascending: false });
+      const res = await fetch(`/api/ads?${params.toString()}`, {
+        method: 'GET',
+      });
 
-      // 2. Применяем фильтры, если они выбраны
-      
-      // Город
-      if (selectedCity !== 'Все города') {
-        query = query.eq('city', selectedCity);
-      }
+      const json = await res.json();
 
-      // Комнаты
-      if (selectedRoom) {
-        if (selectedRoom === 'studio') {
-          // Ищем вариации написания студии
-          query = query.ilike('rooms', '%studio%'); 
-        } else {
-          // Ищем '1', '2' и т.д.
-          query = query.eq('rooms', selectedRoom);
-        }
-      }
+      console.log("⏱ API time:", json.time_ms, "ms");
 
-      // Цена ОТ
-      if (priceMin) {
-        query = query.gte('price', parseInt(priceMin));
-      }
-
-      // Цена ДО
-      if (priceMax) {
-        query = query.lte('price', parseInt(priceMax));
-      }
-
-      // Лимит
-      query = query.limit(50);
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      // Удаляем дубликаты
-      const uniqueAds = data?.filter((ad, index, self) => 
-        index === self.findIndex((t) => t.external_id === ad.external_id)
-      );
-
-      setAds(uniqueAds || []);
+      setAds(json.items || []);
     } catch (err) {
-      console.error('Ошибка:', err);
+      console.error('Ошибка API:', err);
     } finally {
       setLoading(false);
     }
   }
 
-  // Сброс фильтров
   const resetFilters = () => {
     setSelectedCity('Все города');
     setSelectedRoom(null);
@@ -126,11 +85,11 @@ export default function TelegramApp() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 font-sans">
-      
-      {/* --- ШАПКА --- */}
+
+      {/* --- Header --- */}
       <div className="bg-white sticky top-0 z-20 px-4 py-3 border-b border-gray-100 flex justify-between items-center shadow-sm">
         <h1 className="font-bold text-lg text-slate-800">Аренда</h1>
-        
+
         <button 
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
@@ -142,10 +101,10 @@ export default function TelegramApp() {
         </button>
       </div>
 
-      {/* --- ПАНЕЛЬ ФИЛЬТРОВ (Выезжает) --- */}
+      {/* --- Панель фильтров --- */}
       {showFilters && (
         <div className="bg-white border-b border-gray-200 p-4 shadow-md animate-in slide-in-from-top-2">
-          
+
           {/* Город */}
           <div className="mb-4">
             <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Город</label>
@@ -204,7 +163,7 @@ export default function TelegramApp() {
             </div>
           </div>
 
-          {/* Кнопки действий */}
+          {/* Кнопки */}
           <div className="flex gap-3">
             <button 
               onClick={resetFilters}
@@ -222,7 +181,7 @@ export default function TelegramApp() {
         </div>
       )}
 
-      {/* --- СПИСОК (Лоадер или Карточки) --- */}
+      {/* --- Список --- */}
       {loading ? (
         <div className="flex flex-col items-center justify-center pt-20 text-gray-400 gap-2">
           <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
@@ -240,24 +199,27 @@ export default function TelegramApp() {
       ) : (
         <div className="p-3 space-y-3">
           <p className="text-xs text-gray-400 px-1">Найдено: {ads.length}</p>
+
           {ads.map((ad) => (
             <div key={ad.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-              
+
               <div className="flex justify-between items-start mb-2">
                 <div>
                   <div className="text-xl font-bold text-slate-900">
                     {ad.price ? `${ad.price.toLocaleString()} ₽` : 'Цена не указана'}
                     {ad.price && <span className="text-sm font-normal text-gray-400">/мес</span>}
                   </div>
+
                   <div className="flex items-center gap-2 mt-1">
-                     <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-0.5 rounded">
-                       {formatRooms(ad.rooms) || 'Квартира'}
-                     </span>
-                     {ad.area && (
-                       <span className="text-xs text-gray-500 flex items-center gap-1">
-                         <LayoutTemplate size={12} /> {ad.area} м²
-                       </span>
-                     )}
+                    <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-0.5 rounded">
+                      {formatRooms(ad.rooms) || 'Квартира'}
+                    </span>
+
+                    {ad.area && (
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <LayoutTemplate size={12} /> {ad.area} м²
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
